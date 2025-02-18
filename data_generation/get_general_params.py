@@ -1,4 +1,5 @@
 #Retrieves supporting data needed for figures (Thomson, Greenwald fraction, PSOL) and saves them as local files
+#This requires the UKAEA exhaust analysis tools git repo (git.ccfe.ac.uk/jrh/mastu_exhaust_analysis), DOI: 10.1088/1361-6587/ad4058.
 
 import numpy as np
 shotnrs = [46860, 46895, 47115, 46866, 46705, 46904, 47085, 47079, 46762, 46707, 46769, 46776, 46791, 46792, 46794, 47082, 47115, 47118, 46762, 46864, 46867, 46868, 46891, 46903,48008]

@@ -1,5 +1,6 @@
 #Courtesy of P. Ryan
-#Calculates integrated particle fluxes
+#Calculates integrated particle fluxes.
+#This requires LP analysis tools that are embedded in the UKAEA exhaust analysis tools git repo (git.ccfe.ac.uk/jrh/mastu_exhaust_analysis), DOI: 10.1063/5.0152680.
 
 import matplotlib.pyplot as plt
 import numpy as np

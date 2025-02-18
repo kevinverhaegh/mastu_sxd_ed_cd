@@ -1,3 +1,5 @@
+#script for processing the spectroscopic data for #47079, using the DMS diagnostic and repository (https://git.ccfe.ac.uk/dms_development/dms.git), hosted on the UKAEA git server, DOI: 10.1088/1741-4326/aca10a, 10.1088/1741-4326/acf946, 10.1088/1741-4326/ad5851.
+
 import numpy as np
 import dms.analysis.line_integrator as line_integrator
 import dms.general_tools as gt
@@ -9,20 +11,22 @@ from scipy.interpolate import interp1d
 import mat73
 from datetime import datetime
 
-shotnrs = [46762]
+shotnrs = [47079]
 
 #first prepare input file
 shotnr = shotnrs[0]
 inputfile = '/home/kver/'+str(shotnr)+'_BaSPMI.npy' #input data
-fdir_temp = '/hdd/'+str(shotnr)+'_BaySPMI_low_Te_150523/'  #storage of result
+fdir_temp = '/hdd/'+str(shotnr)+'_BaySPMI_low_Te_160623/'  #storage of result
 fitfile = '/common/projects/diagnostics/MAST/SPEXBDMS/analysis_results/' + str(shotnr) + '/n=6 Stark mc.npz'
-Gfile_calc = '/home/kver/G_46860_1.npy'
+Gfile_calc = '/home/kver/G_46762_1.npy'
 
-compute_output = True
+compute_output = False
 prepare_input = True
 calc_line_int = False
 calculate_geom = False
 compute_rates = True
+
+indx_SP = 10
 
 if prepare_input:
     # first scrape data for default analysis
@@ -46,20 +50,21 @@ if prepare_input:
     Da = Da[:,0:30]
     Fulcher = Fulcher[:,0:30]
 
+    # resolve spatial misalignment
+    I = np.append(np.arange(0, 10, 0.5), np.arange(10, 20) - 3)
+    Ireq = np.append(np.arange(0, 10, 0.5), np.linspace(10,16,10))
+
     # take out broken lines of sight
-    n5[:, 17:20] = np.nan
-    n6[:, 17:20] = np.nan
-    Da[:, 20:22] = np.nan
-    Fulcher[:, 20:22] = np.nan
-    Da[:, -1] = np.nan
-    Fulcher[:, -1] = np.nan
+    Da[:,[18,20]] = np.nan
+    Fulcher[:,[18,20]] = np.nan
+    n5[:, [18,19]] = np.nan
+    n6[:, [18,19]] = np.nan
 
-    # interpolate over broken lines of sight
-    n5 = gt.inpaint_nans(n5)
-    n6 = gt.inpaint_nans(n6)
-    Da = gt.inpaint_nans(Da)
-    Fulcher = gt.inpaint_nans(Fulcher)
-
+    # correct misalignment
+    n6 = np.transpose(gt.fix_alignment(I,Ireq,np.transpose(n6)))
+    n5 = np.transpose(gt.fix_alignment(I,Ireq,np.transpose(n5)))
+    Da = np.transpose(gt.fix_alignment(I,Ireq,np.transpose(Da)))
+    Fulcher = np.transpose(gt.fix_alignment(I,Ireq,np.transpose(Fulcher)))
 
     # adjust timebase
     f = interp1d(o[2]['axis_value'][0],np.transpose(Fulcher),bounds_error=False,fill_value='extrapolate')
@@ -77,8 +82,8 @@ if prepare_input:
     time_min = 0.4
     time_max = 0.85
 
-    nemax = 8e19
-    nemin = 0.5e19
+    nemax = 4e19
+    nemin = 1e19
 
     # load Stark broadening results
     fit = gt.fixload(np.load(fitfile, allow_pickle=True))
@@ -91,13 +96,19 @@ if prepare_input:
 
     RelErr = (neH - neL) / ne
 
-    neminR = 5e18
+    neminR = 8e18
     RelErrMax = 1
 
     ne[ne > nemax] = np.nan
     ne[ne < nemin] = np.nan
     ne[RelErr > RelErrMax] = np.nan
-    #ne[:, 17:20] = np.nan
+    ne[:, [18,19]] = np.nan
+    ne = ne [:,:30]
+
+    ne = gt.inpaint_nans(ne)  # interpolate over filtered results
+    ne = gt.smooth2a(ne)
+    # correct misalignment
+    ne = np.transpose(gt.fix_alignment(I,Ireq,np.transpose(ne)))
 
     ne = gt.inpaint_nans(ne)  # interpolate over filtered results
     ne = gt.smooth2a(ne)
@@ -123,7 +134,7 @@ if prepare_input:
     input['FRecForceTrend'] = 1  # Force FRec trend 0 - no, 1 - yes (this implicity assumes that the discharge analysed is a density ramp discharge where the electron temperature gradually decreases (and thus the EIR fraction of the emission is either constant or increasing)
     input['DoParFor'] = 1  # parallel computation
     input['DenMin'] = 7.5e18  # minimum electron density
-    input['DenMax'] = 6.5e19  # maximum electron density
+    input['DenMax'] = 5e19  # maximum electron density
     input['TeE_filter'] = 0  # Use the excitation emission derived temperature as a filter 0 - no, 1 - yes (this implicity assumes that the discharge analysed is a density ramp discharge where the electron temperature gradually decreases (and thus the EIR fraction of the emission is either constant or increasing)
     input['TeR_filter'] = 0  # Filters outcomes where the EIR brightness exceed that which can be obtained from ADAS (e.g. TeR < 0.2 eV) in that case 0.2 eV temperature is assumed - 0 - no, 1 - yes
     input['CoeffUncertainty'] = 0.1  # uniform uncertainty in all atomic emission coefficients (the assumed uncertainty in all the molecular coefficients is double the atomic ones)
@@ -151,8 +162,7 @@ if prepare_input:
     input['Z'] = np.zeros(np.shape(input['n1Int']))
     input['DL'] = np.zeros(np.shape(input['n1Int']))
 
-    #G = np.load('/home/kver/G_' + str(shotnr) + '_1.npy', allow_pickle=True)
-    G = np.load(Gfile_calc,allow_pickle=True)
+    G = np.load('/home/kver/G_' + str(shotnr) + '_1.npy', allow_pickle=True)
     G=G[()]
 
     input['R'] = np.zeros(np.shape(input['n1Int']))
@@ -209,10 +219,8 @@ if prepare_input:
     sio.savemat('/home/kver/'+str(shotnr)+'_BaSPMI.mat', {'input': input})  # save as matlab file
     np.save('/home/kver/'+str(shotnr)+'_BaSPMI.npy', input)  # save as numpy file
 
-indx_SP = 22
-
 selection_t = np.arange(np.argwhere(np.nansum(input['n1Int'],axis=0)>0)[0], np.argwhere(np.nansum(input['n1Int'],axis=0)>0)[-1])  # time indexes to sample
-selection_l = np.arange(indx_SP, 30)  # line of sight indeces to analyse
+selection_l = np.arange(0, 30)  # line of sight indeces to analyse
 
 if compute_output:
     #analyse input file
@@ -235,8 +243,11 @@ if compute_output:
 
 G = np.load(Gfile_calc, allow_pickle=True)
 G=G[()]
+offset = np.nanmedian(G['L'][np.logical_and(G['time']>0.4, G['time']<0.8),indx_SP])
 
 if compute_rates:
+
+    selection_l = np.arange(indx_SP,30)
 
     import dms.analysis.emission.Balmer_analysis_bayes as bay
     import dms.analysis.emission.Balmer_analysis as bal

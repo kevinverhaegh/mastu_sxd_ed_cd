@@ -1,5 +1,4 @@
-#Calculates and visualises extended data figure 7
-#TCV numbers are calculated using DLS_onset_TCV.m and DLS_onset_script_TCV.m (MATLAB) on TCV clusters
+#Calculates the presented table on the DLS comparison to the experiments. Obtained from the exhaust analysis routines hosted on the UKAEA git repository (git.ccfe.ac.uk/jrh/mastu_exhaust_analysis), DOI: 10.1088/1741-4326/acea33
 
 import matplotlib.pyplot as plt
 import mastu_exhaust_analysis as mea

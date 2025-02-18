@@ -17,7 +17,7 @@ Camera numbers:
     cam 8:
     cam 9: molecular hydrogen Fulcher band
 
-MWI routines are stored in the mwi_dp package, hosted on UKAEA Gitlab.
+MWI routines are stored in the mwi_dp package, hosted on UKAEA Gitlab (git.ccfe.ac.uk/twijkamp/mwi_dp) from DOI: 10.1088/1741-4326/acc191.
 
 Routine by T. Wijkamp
 """

@@ -1,4 +1,6 @@
-%Generates subfigures 5a, b, c, g, h, i
+%Matlab script which generates subfigures 5a, b, c, g, h, i by processing SOLPS data. This requires the SOLPS analysis tools by K. Verhaegh,
+%hosted on the UKAEA git repository (git.ccfe.ac.uk/kver/solps_tools) from DOI: X.
+
 
 diag = struct();
 diag.Rp = [1.9, 1.9];

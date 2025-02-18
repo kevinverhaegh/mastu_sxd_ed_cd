@@ -1,2 +1,2 @@
 # mastu_sxd_ed_cd
-Accession codes for "Divertor shaping with neutral baffling as a solution to the tokamak power exhaust challenge"
+Accession and data processing scrips for "Divertor shaping with neutral baffling as a solution to the tokamak power exhaust challenge", which generates the figures in that paper. Plotting codes are provided in the main directory, whereas data generation codes are provided in the data_generation folder. DOI for the data and associated metadata: https://doi.org/10.14468/9m0q-kc26. 

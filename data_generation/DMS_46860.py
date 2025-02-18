@@ -1,3 +1,5 @@
+#script for processing the spectroscopic data for #47079, using the DMS diagnostic and repository (https://git.ccfe.ac.uk/dms_development/dms.git), hosted on the UKAEA git server, DOI: 10.1088/1741-4326/aca10a, 10.1088/1741-4326/acf946, 10.1088/1741-4326/ad5851.
+
 import numpy as np
 import dms.analysis.line_integrator as line_integrator
 import dms.general_tools as gt
@@ -7,24 +9,26 @@ import matplotlib.pyplot as plt
 import dms.analysis.fit.fit_discharge as fd
 from scipy.interpolate import interp1d
 import mat73
-from datetime import datetime
 
-shotnrs = [47079]
+shotnrs = [46860]
 
 #first prepare input file
 shotnr = shotnrs[0]
 inputfile = '/home/kver/'+str(shotnr)+'_BaSPMI.npy' #input data
-fdir_temp = '/hdd/'+str(shotnr)+'_BaySPMI_low_Te_160623/'  #storage of result
+fdir_temp = '/hdd/'+str(shotnr)+'_BaySPMI_low_Te_150623/'  #storage of result
 fitfile = '/common/projects/diagnostics/MAST/SPEXBDMS/analysis_results/' + str(shotnr) + '/n=6 Stark mc.npz'
-Gfile_calc = '/home/kver/G_46762_1.npy'
 
-compute_output = False
+file_partflux = '/home/kver/PycharmProjects/mu02_exhaust_scripts/PartFlux_poly.npy'
+file_coredens = '/home/kver/PycharmProjects/mu02_exhaust_scripts/ngw_info.npy'
+Gfile_SXD = '/home/kver/G_46860_1.npy'
+file_IRVB = '/home/kver/freia_mnt/home/ffederic/work/irvb/MAST-U/2023-07-18/IRVB-MASTU_shot-47958_FAST.npz'
+
+stark_fit = True
+compute_output = True
 prepare_input = True
-calc_line_int = False
-calculate_geom = False
+calc_line_int = True
+calculate_geom = True
 compute_rates = True
-
-indx_SP = 10
 
 if prepare_input:
     # first scrape data for default analysis
@@ -64,6 +68,19 @@ if prepare_input:
     Da = np.transpose(gt.fix_alignment(I,Ireq,np.transpose(Da)))
     Fulcher = np.transpose(gt.fix_alignment(I,Ireq,np.transpose(Fulcher)))
 
+    #get Db
+    shot_db = 46769
+    data_db = dl.retrieve_data_from_shot(46769,3)
+    settings_db = dict()
+    settings_db['wl'] = [485,487]
+    settings_db['t'] = [min(t), max(t)]
+    db, tb, _ = line_integrator.line_integrate_shot(data_db,settings_db)
+    db = 4. * np.pi * (1/0.9) * db[:,:30]
+    db[:,[18,20]] = np.nan
+    db = np.transpose(gt.fix_alignment(I,Ireq,np.transpose(db)))
+    f = interp1d(tb, np.transpose(db), bounds_error=False, fill_value='extrapolate')
+    db = np.transpose(f(t))
+
     # adjust timebase
     f = interp1d(o[2]['axis_value'][0],np.transpose(Fulcher),bounds_error=False,fill_value='extrapolate')
     Fulcher = np.transpose(f(t))
@@ -78,10 +95,13 @@ if prepare_input:
 
     # obtain electron density (45371)
     time_min = 0.4
-    time_max = 0.85
+    time_max = 0.8
 
-    nemax = 4e19
+    nemax = 5e19
     nemin = 1e19
+
+    if stark_fit:
+        print('Performing Stark broadening analysis')
 
     # load Stark broadening results
     fit = gt.fixload(np.load(fitfile, allow_pickle=True))
@@ -100,16 +120,13 @@ if prepare_input:
     ne[ne > nemax] = np.nan
     ne[ne < nemin] = np.nan
     ne[RelErr > RelErrMax] = np.nan
-    ne[:, [18,19]] = np.nan
+    ne[:, 17:20] = np.nan
     ne = ne [:,:30]
 
     ne = gt.inpaint_nans(ne)  # interpolate over filtered results
     ne = gt.smooth2a(ne)
     # correct misalignment
     ne = np.transpose(gt.fix_alignment(I,Ireq,np.transpose(ne)))
-
-    ne = gt.inpaint_nans(ne)  # interpolate over filtered results
-    ne = gt.smooth2a(ne)
     tstark = fit['output']['time']
 
     # resample density inferences to analyse grid by interpolating between them
@@ -145,7 +162,8 @@ if prepare_input:
     input['none'] = np.ones(np.shape(input['n1Int']))  # neutral fraction (not used - obsolete)
     input['n1'] = 5  # n1 Balmer line index
     input['n2'] = 6  # n2 Balmer line index
-    input['DaMea'] = np.transpose(Da)  # measured Da
+    input['DaMea'] = np.transpose(Da)
+    input['DbMea'] = np.transpose(db) # measured Da
     input['nStark'] = 6  # Balmer line index of Stark broadening (not used - for reference)
     input['none_loguniform'] = 1  # 1 - neutral fraction is sampled using a log-uniform distribution; 0 - uniform distribution is used
     input['pMolG'] = [-1.9835,17.5]  # polynomial (in log-log space) of DL*nH2 as function of Te (used to estimate the D2 contribution to the Balmer line emisison - NOT the D2+ & D- contributions)
@@ -153,12 +171,18 @@ if prepare_input:
     input['sys'] = 1  # system number (for reference)
     input['Time'] = t  # time vector
 
+    input['FulcherMax'] = 1.7e19  #Suspected missing of Fulcher peak, set to a fixed value according to less detached ED power scan measurements (47085)
+
     # perform magnetic mapping of LoS with plasma geometry. Calculate line-of-sight intersections with the separatrix, leading to R, Z positions. Estimate pathlengths of emission region along line of sight
     import dms.analysis.geometry as geom
 
     input['R'] = np.zeros(np.shape(input['n1Int']))
     input['Z'] = np.zeros(np.shape(input['n1Int']))
     input['DL'] = np.zeros(np.shape(input['n1Int']))
+
+    if calculate_geom:
+        G = geom.get_R_Z_DL(dl.retrieve_data_from_shot(shotnr,1))
+        np.save('/home/kver/G_'+str(shotnr)+'_1.npy', G)
 
     G = np.load('/home/kver/G_' + str(shotnr) + '_1.npy', allow_pickle=True)
     G=G[()]
@@ -212,19 +236,18 @@ if prepare_input:
                 0.5 / 2.1)) * LR_norm_accum)  # assumed initial condition of n2 molecular contamination (by default 0). Here this is calculated such that the atomic only line ratios reach high values at th eend of the discharge (0.5)
     import scipy.io as sio
 
-    input['FulcherMax'] = 1.7e19
-
     sio.savemat('/home/kver/'+str(shotnr)+'_BaSPMI.mat', {'input': input})  # save as matlab file
     np.save('/home/kver/'+str(shotnr)+'_BaSPMI.npy', input)  # save as numpy file
 
 selection_t = np.arange(np.argwhere(np.nansum(input['n1Int'],axis=0)>0)[0], np.argwhere(np.nansum(input['n1Int'],axis=0)>0)[-1])  # time indexes to sample
-selection_l = np.arange(0, 30)  # line of sight indeces to analyse
+selection_l = np.arange(0, 30)
 
 if compute_output:
     #analyse input file
     inputfile = '/home/kver/'+str(shotnr)+'_BaSPMI.npy'
     A = np.load(inputfile, allow_pickle=True)
     input = A[()]
+
     # #runs analysis and performs sampling
      # temporary storage directory
     import dms.general_tools as gt
@@ -239,17 +262,13 @@ if compute_output:
                  not_only_sampling=True,data_reduction=True)
     np.save(fdir_temp + 'input.npy', input)
 
-G = np.load(Gfile_calc, allow_pickle=True)
-G=G[()]
-offset = np.nanmedian(G['L'][np.logical_and(G['time']>0.4, G['time']<0.8),indx_SP])
-
 if compute_rates:
-
-    selection_l = np.arange(indx_SP,30)
 
     import dms.analysis.emission.Balmer_analysis_bayes as bay
     import dms.analysis.emission.Balmer_analysis as bal
     #get physics output
+    output = bay.build_sample(fdir_temp,selection_t,selection_l)
+    output = bay.rates_extrap_adas_structure(output, low_te=True)
     output = bay.rates_extrap(fdir_temp, selection_t, selection_l) #rates & uncertainty propagation
-    output = bal.rates_integr(output,select_l=selection_l) #integrate rates
+    output = bal.rates_integr(output) #integrate rates
     np.save(fdir_temp + 'output_proc.npy', output)
